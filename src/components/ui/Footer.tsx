@@ -87,12 +87,6 @@ export default function Footer({ profile, socialLinks }: FooterProps) {
                 <Mail className="w-4 h-4" />
               </a>
             </div>
-            <Link
-              href="/admin"
-              className="inline-flex items-center gap-1.5 text-xs text-purple-400 hover:text-purple-300 font-medium transition-colors"
-            >
-              <span>Admin Portal</span> &rarr;
-            </Link>
           </div>
 
         </div>

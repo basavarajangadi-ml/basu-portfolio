@@ -104,23 +104,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    // Local mode demo login
-    // Accept valid email and non-empty password (min 6 chars)
-    if (email && password.length >= 6) {
-      const demoUser: AuthUser = {
-        id: "local-admin-id",
-        email,
-        role: "admin",
-      };
-      setUser(demoUser);
-      localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(demoUser));
-      return { success: true };
-    }
+    // Secure server-side verification
+    try {
+      const res = await fetch("/api/admin/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
 
-    return { 
-      success: false, 
-      error: "Please enter a valid email and password (minimum 6 characters)." 
-    };
+      const data = await res.json();
+      if (res.ok && data.success && data.user) {
+        setUser(data.user);
+        localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(data.user));
+        return { success: true };
+      } else {
+        return { success: false, error: data.error || "Invalid email or password." };
+      }
+    } catch (err: any) {
+      return { success: false, error: "Authentication server error. Please try again." };
+    }
   };
 
   const signOut = async () => {

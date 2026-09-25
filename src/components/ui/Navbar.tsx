@@ -140,25 +140,10 @@ export default function Navbar({ profile, socialLinks }: NavbarProps) {
               </a>
             )}
 
-            {/* Admin Portal link */}
-            <Link
-              href="/admin"
-              className="p-2 rounded-lg bg-gray-900/60 border border-purple-500/30 text-purple-400 hover:text-purple-300 hover:bg-purple-950/40 transition-all"
-              title="Admin Dashboard"
-            >
-              <Shield className="w-4 h-4" />
-            </Link>
           </div>
 
           {/* Mobile Hamburger Button */}
           <div className="flex xl:hidden items-center gap-2">
-            <Link
-              href="/admin"
-              className="p-2 rounded-lg bg-gray-900/60 border border-purple-500/30 text-purple-400"
-              title="Admin Dashboard"
-            >
-              <Shield className="w-4 h-4" />
-            </Link>
             <button
               onClick={() => setIsOpen(!isOpen)}
               type="button"

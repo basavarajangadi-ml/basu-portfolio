@@ -43,11 +43,6 @@ export default function AdminLoginPage() {
     }
   };
 
-  const handleDemoFill = () => {
-    setEmail("admin@example.com");
-    setPassword("admin123456");
-  };
-
   return (
     <div className="min-h-screen bg-[#030712] ai-background ai-grid flex items-center justify-center p-4">
       
@@ -163,17 +158,9 @@ export default function AdminLoginPage() {
 
           </form>
 
-          {/* Quick Demo Helper */}
           <div className="pt-2 border-t border-white/5 text-center">
-            <button
-              type="button"
-              onClick={handleDemoFill}
-              className="text-xs text-cyan-400/80 hover:text-cyan-300 font-mono underline"
-            >
-              Auto-fill sample credentials
-            </button>
-            <p className="text-[11px] text-gray-500 mt-2 leading-relaxed">
-              When Supabase is connected, use your Supabase Auth user credentials.
+            <p className="text-[11px] text-gray-500 leading-relaxed font-mono">
+              Authorized access only. Protected by Row Level Security policies.
             </p>
           </div>
 
