@@ -11,35 +11,29 @@ export async function POST(request: Request) {
       );
     }
 
-    const adminEmail = process.env.ADMIN_EMAIL || "admin@example.com";
+    const adminEmail = process.env.ADMIN_EMAIL;
     const adminPassword = process.env.ADMIN_PASSWORD;
 
-    // If an explicit ADMIN_PASSWORD is set in environment variables:
-    if (adminPassword) {
-      if (email.toLowerCase() === adminEmail.toLowerCase() && password === adminPassword) {
-        return NextResponse.json({
-          success: true,
-          user: { id: "admin-secure-id", email: adminEmail, role: "admin" }
-        });
-      } else {
-        return NextResponse.json(
-          { error: "Invalid email or password." },
-          { status: 401 }
-        );
-      }
+    // Both ADMIN_EMAIL and ADMIN_PASSWORD must be configured
+    if (!adminEmail || !adminPassword) {
+      return NextResponse.json(
+        { error: "Admin access is protected. Please configure ADMIN_EMAIL and ADMIN_PASSWORD in your server environment variables." },
+        { status: 503 }
+      );
     }
 
-    // Default fallback if no ADMIN_PASSWORD set yet:
-    // Allow demo admin credentials or any email with password length >= 6
-    if (password.length >= 6) {
+    if (
+      email.trim().toLowerCase() === adminEmail.trim().toLowerCase() &&
+      password === adminPassword
+    ) {
       return NextResponse.json({
         success: true,
-        user: { id: "admin-secure-id", email: email.toLowerCase(), role: "admin" }
+        user: { id: "admin-secure-id", email: adminEmail, role: "admin" }
       });
     }
 
     return NextResponse.json(
-      { error: "Password must be at least 6 characters." },
+      { error: "Access denied. Invalid admin email or password." },
       { status: 401 }
     );
   } catch (err: any) {
