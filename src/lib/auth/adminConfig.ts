@@ -8,8 +8,8 @@
  */
 export const ADMIN_CONFIG = {
   // Your admin login email:
-  email: "admin@example.com",
+  email: "basumangadi45@gmail.com",
 
-  // Your private secret password (change this to whatever password you want):
-  password: "Basu@Admin2026",
+  // Your private secret password:
+  password: "Basu@#7097@#",
 };
