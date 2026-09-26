@@ -14,21 +14,19 @@ import {
   ArrowLeft,
   KeyRound,
   CheckCircle2,
-  RefreshCw,
-  UserPlus
+  RefreshCw
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthContext";
 
 export default function AdminLoginPage() {
-  const [authMode, setAuthMode] = useState<"signin" | "signup" | "forgot">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // OTP flow state
+  // Forgot password & OTP flow state
+  const [isForgotMode, setIsForgotMode] = useState(false);
   const [otpStep, setOtpStep] = useState<"enter-email" | "enter-otp">("enter-email");
   const [forgotEmail, setForgotEmail] = useState("");
   const [otpCode, setOtpCode] = useState("");
@@ -36,7 +34,7 @@ export default function AdminLoginPage() {
   const [resetConfirmPassword, setResetConfirmPassword] = useState("");
   const [otpSentNotice, setOtpSentNotice] = useState<string | null>(null);
 
-  const { signIn, signUp, isSupabaseActive } = useAuth();
+  const { signIn, isSupabaseActive } = useAuth();
   const router = useRouter();
 
   // Handle Login
@@ -51,42 +49,10 @@ export default function AdminLoginPage() {
       if (res.success) {
         router.push("/admin");
       } else {
-        setError(res.error || "Authentication failed. Access denied.");
+        setError(res.error || "Access denied. Invalid admin email or password.");
       }
     } catch (err: any) {
       setError(err?.message || "An unexpected error occurred during sign in.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Handle Sign Up (Register first-time admin)
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccessMsg(null);
-
-    if (password !== confirmPassword) {
-      setError("Passwords do not match. Please re-enter.");
-      return;
-    }
-
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters long.");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const res = await signUp(email.trim(), password);
-      if (res.success) {
-        router.push("/admin");
-      } else {
-        setError(res.error || "Failed to register admin account.");
-      }
-    } catch (err: any) {
-      setError(err?.message || "An unexpected error occurred during registration.");
     } finally {
       setLoading(false);
     }
@@ -161,7 +127,7 @@ export default function AdminLoginPage() {
         setSuccessMsg("Password reset successfully! Please sign in with your new password.");
         setEmail(forgotEmail);
         setPassword("");
-        setAuthMode("signin");
+        setIsForgotMode(false);
         setOtpStep("enter-email");
         setOtpCode("");
         setNewPassword("");
@@ -195,7 +161,7 @@ export default function AdminLoginPage() {
             <ArrowLeft className="w-4 h-4" />
             <span>Return to Portfolio</span>
           </Link>
-          <span className="text-xs font-mono text-gray-500">Owner Access</span>
+          <span className="text-xs font-mono text-gray-500">Admin Only</span>
         </div>
 
         {/* Card */}
@@ -203,9 +169,7 @@ export default function AdminLoginPage() {
           
           <div className="text-center space-y-2">
             <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-cyan-500/20 to-purple-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-glow mb-3">
-              {authMode === "signup" ? (
-                <UserPlus className="w-7 h-7" />
-              ) : authMode === "forgot" ? (
+              {isForgotMode ? (
                 <KeyRound className="w-7 h-7" />
               ) : (
                 <ShieldCheck className="w-7 h-7" />
@@ -213,56 +177,14 @@ export default function AdminLoginPage() {
             </div>
 
             <h1 className="text-2xl font-bold text-white tracking-tight">
-              {authMode === "signup" 
-                ? "Create Admin Account" 
-                : authMode === "forgot" 
-                ? "Reset Admin Password" 
-                : "Admin Sign In"}
+              {isForgotMode ? "Reset Admin Password" : "Admin Sign In"}
             </h1>
             <p className="text-xs text-gray-400">
-              {authMode === "signup"
-                ? "Set up your private email and password as the portfolio owner."
-                : authMode === "forgot"
-                ? "Verify with a 6-digit OTP code to safely recover your credentials."
-                : "Secure dashboard access for managing portfolio content and assets."}
+              {isForgotMode
+                ? "Verify with a 6-digit OTP code to safely reset your admin password."
+                : "Authorized access strictly for the portfolio owner."}
             </p>
           </div>
-
-          {/* Tab Selector: Sign In vs Create Account */}
-          {authMode !== "forgot" && (
-            <div className="flex rounded-xl bg-gray-900/90 p-1 border border-white/10">
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthMode("signin");
-                  setError(null);
-                  setSuccessMsg(null);
-                }}
-                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
-                  authMode === "signin"
-                    ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-glow"
-                    : "text-gray-400 hover:text-white"
-                }`}
-              >
-                Sign In
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthMode("signup");
-                  setError(null);
-                  setSuccessMsg(null);
-                }}
-                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
-                  authMode === "signup"
-                    ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-glow"
-                    : "text-gray-400 hover:text-white"
-                }`}
-              >
-                Create Account
-              </button>
-            </div>
-          )}
 
           {/* Status Badge */}
           <div className="flex items-center justify-center">
@@ -300,9 +222,9 @@ export default function AdminLoginPage() {
           )}
 
           {/* ========================================================================= */}
-          {/* 1. SIGN IN FORM */}
+          {/* 1. SIGN IN FORM (ONLY FOR ADMIN) */}
           {/* ========================================================================= */}
-          {authMode === "signin" && (
+          {!isForgotMode ? (
             <form onSubmit={handleLogin} className="space-y-4">
               
               <div>
@@ -332,7 +254,7 @@ export default function AdminLoginPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      setAuthMode("forgot");
+                      setIsForgotMode(true);
                       setForgotEmail(email || "");
                       setError(null);
                       setSuccessMsg(null);
@@ -376,96 +298,10 @@ export default function AdminLoginPage() {
               </button>
 
             </form>
-          )}
-
-          {/* ========================================================================= */}
-          {/* 2. SIGN UP / CREATE ADMIN ACCOUNT FORM */}
-          {/* ========================================================================= */}
-          {authMode === "signup" && (
-            <form onSubmit={handleSignUp} className="space-y-4">
-              
-              <div>
-                <label className="block text-xs font-mono uppercase text-gray-400 mb-1.5">
-                  Your Admin Email
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-500">
-                    <Mail className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="email"
-                    required
-                    placeholder="e.g. basu@gmail.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-900/80 border border-white/10 text-white placeholder-gray-600 text-sm focus:border-cyan-400 transition-colors"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-mono uppercase text-gray-400 mb-1.5">
-                  Set Your Password
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-500">
-                    <Lock className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="password"
-                    required
-                    placeholder="At least 6 characters"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-900/80 border border-white/10 text-white placeholder-gray-600 text-sm focus:border-cyan-400 transition-colors"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-mono uppercase text-gray-400 mb-1.5">
-                  Confirm Password
-                </label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-500">
-                    <Lock className="w-4 h-4" />
-                  </div>
-                  <input
-                    type="password"
-                    required
-                    placeholder="Re-type your password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-900/80 border border-white/10 text-white placeholder-gray-600 text-sm focus:border-cyan-400 transition-colors"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading || !email || !password || !confirmPassword}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm bg-gradient-to-r from-emerald-500 to-cyan-600 text-white shadow-glow hover:opacity-95 transition-all disabled:opacity-50"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Creating Admin Account...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Create & Access Dashboard</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </>
-                )}
-              </button>
-
-            </form>
-          )}
-
-          {/* ========================================================================= */}
-          {/* 3. FORGOT PASSWORD & OTP FORM */}
-          {/* ========================================================================= */}
-          {authMode === "forgot" && (
+          ) : (
+            /* ========================================================================= */
+            /* 2. FORGOT PASSWORD & OTP FORM */
+            /* ========================================================================= */
             <div className="space-y-4">
               
               {otpStep === "enter-email" ? (
@@ -481,14 +317,14 @@ export default function AdminLoginPage() {
                       <input
                         type="email"
                         required
-                        placeholder="e.g. basu@gmail.com"
+                        placeholder="e.g. admin@example.com"
                         value={forgotEmail}
                         onChange={(e) => setForgotEmail(e.target.value)}
                         className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-900/80 border border-white/10 text-white placeholder-gray-600 text-sm focus:border-cyan-400 transition-colors"
                       />
                     </div>
                     <p className="text-[11px] text-gray-500 mt-1">
-                      We will generate a 6-digit OTP code to verify your identity.
+                      We will generate a 6-digit OTP code to verify owner identity.
                     </p>
                   </div>
 
@@ -608,7 +444,7 @@ export default function AdminLoginPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setAuthMode("signin");
+                    setIsForgotMode(false);
                     setOtpStep("enter-email");
                     setError(null);
                     setOtpSentNotice(null);

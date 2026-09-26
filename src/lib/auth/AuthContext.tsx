@@ -14,7 +14,6 @@ interface AuthContextType {
   loading: boolean;
   isSupabaseActive: boolean;
   signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  signUp: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
 }
 
@@ -23,7 +22,6 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   isSupabaseActive: false,
   signIn: async () => ({ success: false }),
-  signUp: async () => ({ success: false }),
   signOut: async () => {},
 });
 
@@ -84,27 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    if (isSupabaseActive && supabase) {
-      try {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-
-        if (!error && data?.user) {
-          setUser({
-            id: data.user.id,
-            email: data.user.email || email,
-            role: "admin",
-          });
-          return { success: true };
-        }
-      } catch (err: any) {
-        console.warn("Supabase auth unreachable or error, falling back to server verification:", err);
-      }
-    }
-
-    // Secure server-side verification
+    // 1. Primary verification via your secure website API route
     try {
       const clientVaultPassword = typeof window !== 'undefined' ? localStorage.getItem("portfolio_admin_vault_pass") : null;
 
@@ -112,7 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
-          email, 
+          email: email.trim(), 
           password,
           clientVaultPassword: clientVaultPassword || undefined
         }),
@@ -123,44 +101,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(data.user);
         localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(data.user));
         localStorage.setItem("portfolio_admin_vault_pass", password);
+
+        // Optional background Supabase session sync if Supabase is active
+        if (isSupabaseActive && supabase) {
+          supabase.auth.signInWithPassword({ email: email.trim(), password }).catch(() => {});
+        }
+
         return { success: true };
       } else {
-        return { success: false, error: data.error || "Invalid email or password." };
+        return { success: false, error: data.error || "Access denied. Invalid admin email or password." };
       }
     } catch (err: any) {
       return { success: false, error: "Authentication server error. Please try again." };
-    }
-  };
-
-  const signUp = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    // 1. Try Supabase sign up if active
-    if (isSupabaseActive && supabase) {
-      try {
-        await supabase.auth.signUp({ email, password });
-      } catch (err) {
-        console.warn("Supabase signup skipped or unreachable:", err);
-      }
-    }
-
-    // 2. Register in server store
-    try {
-      const res = await fetch("/api/admin/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-
-      const data = await res.json();
-      if (res.ok && data.success && data.user) {
-        setUser(data.user);
-        localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(data.user));
-        localStorage.setItem("portfolio_admin_vault_pass", password);
-        return { success: true };
-      } else {
-        return { success: false, error: data.error || "Failed to create admin account." };
-      }
-    } catch {
-      return { success: false, error: "Server error during registration." };
     }
   };
 
@@ -175,7 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, isSupabaseActive, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, loading, isSupabaseActive, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );
