@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { verifyAdminCredentials, getAdminEmail } from "@/lib/auth/adminStore";
+import { ADMIN_CONFIG } from "@/lib/auth/adminConfig";
 
 export async function POST(request: Request) {
   try {
-    const { email, password, clientVaultPassword } = await request.json();
+    const { email, password } = await request.json();
 
     if (!email || !password) {
       return NextResponse.json(
@@ -12,26 +12,30 @@ export async function POST(request: Request) {
       );
     }
 
-    const isValid = verifyAdminCredentials(email, password, clientVaultPassword);
+    const expectedEmail = (process.env.ADMIN_EMAIL || ADMIN_CONFIG.email).trim().toLowerCase();
+    const expectedPassword = process.env.ADMIN_PASSWORD || ADMIN_CONFIG.password;
 
-    if (isValid) {
+    const inputEmail = email.trim().toLowerCase();
+
+    // STRICT OWNER CHECK: Only the exact admin email and exact password are accepted
+    if (inputEmail === expectedEmail && password === expectedPassword) {
       return NextResponse.json({
         success: true,
         user: { 
           id: "admin-secure-id", 
-          email: email.trim().toLowerCase(), 
+          email: expectedEmail, 
           role: "admin" 
         }
       });
     }
 
     return NextResponse.json(
-      { error: "Access denied. Invalid admin email or password." },
+      { error: "Access denied. Only the portfolio owner can sign in." },
       { status: 401 }
     );
   } catch (err: any) {
     return NextResponse.json(
-      { error: "Internal server error during authentication." },
+      { error: "Authentication server error. Please try again." },
       { status: 500 }
     );
   }
