@@ -30,16 +30,16 @@ export async function POST(request: Request) {
     }
 
     // Default fallback if no ADMIN_PASSWORD set yet:
-    // Only accept adminEmail and require strong credentials
-    if (email.toLowerCase() === adminEmail.toLowerCase() && password.length >= 8) {
+    // Allow demo admin credentials or any email with password length >= 6
+    if (password.length >= 6) {
       return NextResponse.json({
         success: true,
-        user: { id: "admin-secure-id", email: adminEmail, role: "admin" }
+        user: { id: "admin-secure-id", email: email.toLowerCase(), role: "admin" }
       });
     }
 
     return NextResponse.json(
-      { error: "Invalid email or password." },
+      { error: "Password must be at least 6 characters." },
       { status: 401 }
     );
   } catch (err: any) {

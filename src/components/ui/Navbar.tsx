@@ -140,6 +140,15 @@ export default function Navbar({ profile, socialLinks }: NavbarProps) {
               </a>
             )}
 
+            {/* Admin Portal */}
+            <Link
+              href="/admin/login"
+              title="Admin Portal Login"
+              className="p-2 rounded-lg bg-gray-900/60 border border-white/10 text-gray-400 hover:text-cyan-400 hover:border-cyan-500/50 hover:bg-gray-800 transition-all flex items-center justify-center"
+            >
+              <Shield className="w-4 h-4" />
+            </Link>
+
           </div>
 
           {/* Mobile Hamburger Button */}
@@ -215,6 +224,18 @@ export default function Navbar({ profile, socialLinks }: NavbarProps) {
                     <Linkedin className="w-5 h-5" />
                   </a>
                 )}
+              </div>
+
+              {/* Mobile Admin Link */}
+              <div className="pt-2 text-center border-t border-white/10">
+                <Link
+                  href="/admin/login"
+                  onClick={() => setIsOpen(false)}
+                  className="inline-flex items-center gap-1.5 text-xs font-mono text-cyan-400 hover:text-cyan-300"
+                >
+                  <Shield className="w-3.5 h-3.5" />
+                  <span>Admin Dashboard Portal</span>
+                </Link>
               </div>
             </div>
           </nav>

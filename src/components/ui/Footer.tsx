@@ -52,6 +52,11 @@ export default function Footer({ profile, socialLinks }: FooterProps) {
               <li><a href="#certificates" className="hover:text-cyan-400 transition-colors">Certifications</a></li>
               <li><a href="#education" className="hover:text-cyan-400 transition-colors">Education & Experience</a></li>
               <li><a href="#contact" className="hover:text-cyan-400 transition-colors">Contact</a></li>
+              <li className="pt-2 border-t border-white/10">
+                <Link href="/admin/login" className="inline-flex items-center gap-1.5 text-xs font-mono text-cyan-400/80 hover:text-cyan-300 transition-colors">
+                  <span>🔐 Admin Portal Login</span>
+                </Link>
+              </li>
             </ul>
           </div>
 

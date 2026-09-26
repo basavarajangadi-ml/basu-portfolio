@@ -98,6 +98,29 @@ export default function AdminLoginPage() {
             </div>
           )}
 
+          {/* Quick Credentials Box */}
+          <div className="p-3.5 rounded-2xl bg-cyan-950/40 border border-cyan-500/30 text-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-cyan-300 flex items-center gap-1.5">
+                <span>🔑</span> Default Admin Credentials:
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setEmail("admin@example.com");
+                  setPassword("admin12345");
+                }}
+                className="px-2.5 py-1 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 font-mono text-[11px] font-medium transition-colors border border-cyan-500/40"
+              >
+                Auto-Fill
+              </button>
+            </div>
+            <div className="text-[11px] font-mono text-gray-300 space-y-0.5">
+              <div>Email: <span className="text-white select-all font-semibold">admin@example.com</span></div>
+              <div>Password: <span className="text-white select-all font-semibold">admin12345</span></div>
+            </div>
+          </div>
+
           <form onSubmit={handleLogin} className="space-y-4">
             
             <div>
