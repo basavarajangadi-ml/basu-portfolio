@@ -14,6 +14,7 @@ interface AuthContextType {
   loading: boolean;
   isSupabaseActive: boolean;
   signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  signUp: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
 }
 
@@ -22,6 +23,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   isSupabaseActive: false,
   signIn: async () => ({ success: false }),
+  signUp: async () => ({ success: false }),
   signOut: async () => {},
 });
 
@@ -46,6 +48,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             role: "admin",
           });
         }
+        setLoading(false);
+      }).catch(() => {
         setLoading(false);
       });
 
@@ -87,11 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           password,
         });
 
-        if (error) {
-          return { success: false, error: error.message };
-        }
-
-        if (data.user) {
+        if (!error && data?.user) {
           setUser({
             id: data.user.id,
             email: data.user.email || email,
@@ -100,7 +100,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return { success: true };
         }
       } catch (err: any) {
-        return { success: false, error: err.message || "Authentication failed" };
+        console.warn("Supabase auth unreachable or error, falling back to server verification:", err);
       }
     }
 
@@ -132,16 +132,50 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const signUp = async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    // 1. Try Supabase sign up if active
+    if (isSupabaseActive && supabase) {
+      try {
+        await supabase.auth.signUp({ email, password });
+      } catch (err) {
+        console.warn("Supabase signup skipped or unreachable:", err);
+      }
+    }
+
+    // 2. Register in server store
+    try {
+      const res = await fetch("/api/admin/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success && data.user) {
+        setUser(data.user);
+        localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(data.user));
+        localStorage.setItem("portfolio_admin_vault_pass", password);
+        return { success: true };
+      } else {
+        return { success: false, error: data.error || "Failed to create admin account." };
+      }
+    } catch {
+      return { success: false, error: "Server error during registration." };
+    }
+  };
+
   const signOut = async () => {
     if (isSupabaseActive && supabase) {
-      await supabase.auth.signOut();
+      try {
+        await supabase.auth.signOut();
+      } catch {}
     }
     localStorage.removeItem(LOCAL_AUTH_KEY);
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, isSupabaseActive, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, loading, isSupabaseActive, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );

@@ -14,29 +14,32 @@ import {
   ArrowLeft,
   KeyRound,
   CheckCircle2,
-  RefreshCw
+  RefreshCw,
+  UserPlus
 } from "lucide-react";
 import { useAuth } from "@/lib/auth/AuthContext";
 
 export default function AdminLoginPage() {
+  const [authMode, setAuthMode] = useState<"signin" | "signup" | "forgot">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  // Forgot password & OTP state
-  const [isForgotMode, setIsForgotMode] = useState(false);
+  // OTP flow state
   const [otpStep, setOtpStep] = useState<"enter-email" | "enter-otp">("enter-email");
   const [forgotEmail, setForgotEmail] = useState("");
   const [otpCode, setOtpCode] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const [resetConfirmPassword, setResetConfirmPassword] = useState("");
   const [otpSentNotice, setOtpSentNotice] = useState<string | null>(null);
 
-  const { signIn, isSupabaseActive } = useAuth();
+  const { signIn, signUp, isSupabaseActive } = useAuth();
   const router = useRouter();
 
+  // Handle Login
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -57,6 +60,39 @@ export default function AdminLoginPage() {
     }
   };
 
+  // Handle Sign Up (Register first-time admin)
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccessMsg(null);
+
+    if (password !== confirmPassword) {
+      setError("Passwords do not match. Please re-enter.");
+      return;
+    }
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters long.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const res = await signUp(email.trim(), password);
+      if (res.success) {
+        router.push("/admin");
+      } else {
+        setError(res.error || "Failed to register admin account.");
+      }
+    } catch (err: any) {
+      setError(err?.message || "An unexpected error occurred during registration.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle OTP Send
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -75,26 +111,27 @@ export default function AdminLoginPage() {
       if (res.ok && data.success) {
         setOtpStep("enter-otp");
         if (data.otpCode) {
-          setOtpSentNotice(`6-digit OTP generated! Code: ${data.otpCode}`);
+          setOtpSentNotice(`6-digit OTP code: ${data.otpCode}`);
         } else {
           setSuccessMsg("Verification code sent to your email!");
         }
       } else {
-        setError(data.error || "Failed to send OTP. Please check your email.");
+        setError(data.error || "Failed to generate OTP. Please verify email address.");
       }
-    } catch (err: any) {
+    } catch {
       setError("Server error while requesting OTP.");
     } finally {
       setLoading(false);
     }
   };
 
+  // Handle OTP Verify & Reset
   const handleVerifyOtpAndReset = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (newPassword !== confirmPassword) {
-      setError("Passwords do not match. Please re-enter.");
+    if (newPassword !== resetConfirmPassword) {
+      setError("New passwords do not match.");
       return;
     }
 
@@ -118,23 +155,22 @@ export default function AdminLoginPage() {
 
       const data = await res.json();
       if (res.ok && data.success) {
-        // Save to client vault for persistence
         if (typeof window !== "undefined") {
           localStorage.setItem("portfolio_admin_vault_pass", newPassword);
         }
         setSuccessMsg("Password reset successfully! Please sign in with your new password.");
         setEmail(forgotEmail);
         setPassword("");
-        setIsForgotMode(false);
+        setAuthMode("signin");
         setOtpStep("enter-email");
         setOtpCode("");
         setNewPassword("");
-        setConfirmPassword("");
+        setResetConfirmPassword("");
         setOtpSentNotice(null);
       } else {
         setError(data.error || "Invalid or expired OTP code.");
       }
-    } catch (err: any) {
+    } catch {
       setError("Server error during OTP verification.");
     } finally {
       setLoading(false);
@@ -167,28 +203,72 @@ export default function AdminLoginPage() {
           
           <div className="text-center space-y-2">
             <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-tr from-cyan-500/20 to-purple-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-glow mb-3">
-              {isForgotMode ? <KeyRound className="w-7 h-7" /> : <ShieldCheck className="w-7 h-7" />}
+              {authMode === "signup" ? (
+                <UserPlus className="w-7 h-7" />
+              ) : authMode === "forgot" ? (
+                <KeyRound className="w-7 h-7" />
+              ) : (
+                <ShieldCheck className="w-7 h-7" />
+              )}
             </div>
 
             <h1 className="text-2xl font-bold text-white tracking-tight">
-              {isForgotMode ? "Reset Admin Password" : "Admin Authentication"}
+              {authMode === "signup" 
+                ? "Create Admin Account" 
+                : authMode === "forgot" 
+                ? "Reset Admin Password" 
+                : "Admin Sign In"}
             </h1>
             <p className="text-xs text-gray-400">
-              {isForgotMode
-                ? "Verify with a 6-digit OTP to safely recover your admin account."
-                : "Private dashboard access for managing portfolio content and assets."}
+              {authMode === "signup"
+                ? "Set up your private email and password as the portfolio owner."
+                : authMode === "forgot"
+                ? "Verify with a 6-digit OTP code to safely recover your credentials."
+                : "Secure dashboard access for managing portfolio content and assets."}
             </p>
           </div>
 
+          {/* Tab Selector: Sign In vs Create Account */}
+          {authMode !== "forgot" && (
+            <div className="flex rounded-xl bg-gray-900/90 p-1 border border-white/10">
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode("signin");
+                  setError(null);
+                  setSuccessMsg(null);
+                }}
+                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+                  authMode === "signin"
+                    ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-glow"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                Sign In
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode("signup");
+                  setError(null);
+                  setSuccessMsg(null);
+                }}
+                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all ${
+                  authMode === "signup"
+                    ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-glow"
+                    : "text-gray-400 hover:text-white"
+                }`}
+              >
+                Create Account
+              </button>
+            </div>
+          )}
+
           {/* Status Badge */}
           <div className="flex items-center justify-center">
-            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono border ${
-              isSupabaseActive 
-                ? "bg-emerald-950/40 border-emerald-500/30 text-emerald-300"
-                : "bg-cyan-950/40 border-cyan-500/30 text-cyan-300"
-            }`}>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono border bg-cyan-950/40 border-cyan-500/30 text-cyan-300">
               <Database className="w-3 h-3" />
-              <span>{isSupabaseActive ? "Supabase Cloud Auth" : "Owner Vault Protected"}</span>
+              <span>Owner Vault Protected</span>
             </span>
           </div>
 
@@ -220,9 +300,9 @@ export default function AdminLoginPage() {
           )}
 
           {/* ========================================================================= */}
-          {/* LOGIN FORM */}
+          {/* 1. SIGN IN FORM */}
           {/* ========================================================================= */}
-          {!isForgotMode ? (
+          {authMode === "signin" && (
             <form onSubmit={handleLogin} className="space-y-4">
               
               <div>
@@ -252,7 +332,7 @@ export default function AdminLoginPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      setIsForgotMode(true);
+                      setAuthMode("forgot");
                       setForgotEmail(email || "");
                       setError(null);
                       setSuccessMsg(null);
@@ -296,10 +376,96 @@ export default function AdminLoginPage() {
               </button>
 
             </form>
-          ) : (
-            /* ========================================================================= */
-            /* FORGOT PASSWORD & OTP FORM */
-            /* ========================================================================= */
+          )}
+
+          {/* ========================================================================= */}
+          {/* 2. SIGN UP / CREATE ADMIN ACCOUNT FORM */}
+          {/* ========================================================================= */}
+          {authMode === "signup" && (
+            <form onSubmit={handleSignUp} className="space-y-4">
+              
+              <div>
+                <label className="block text-xs font-mono uppercase text-gray-400 mb-1.5">
+                  Your Admin Email
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-500">
+                    <Mail className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="email"
+                    required
+                    placeholder="e.g. basu@gmail.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-900/80 border border-white/10 text-white placeholder-gray-600 text-sm focus:border-cyan-400 transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-mono uppercase text-gray-400 mb-1.5">
+                  Set Your Password
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-500">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="password"
+                    required
+                    placeholder="At least 6 characters"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-900/80 border border-white/10 text-white placeholder-gray-600 text-sm focus:border-cyan-400 transition-colors"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-mono uppercase text-gray-400 mb-1.5">
+                  Confirm Password
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-gray-500">
+                    <Lock className="w-4 h-4" />
+                  </div>
+                  <input
+                    type="password"
+                    required
+                    placeholder="Re-type your password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-900/80 border border-white/10 text-white placeholder-gray-600 text-sm focus:border-cyan-400 transition-colors"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading || !email || !password || !confirmPassword}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm bg-gradient-to-r from-emerald-500 to-cyan-600 text-white shadow-glow hover:opacity-95 transition-all disabled:opacity-50"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Creating Admin Account...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Create & Access Dashboard</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
+              </button>
+
+            </form>
+          )}
+
+          {/* ========================================================================= */}
+          {/* 3. FORGOT PASSWORD & OTP FORM */}
+          {/* ========================================================================= */}
+          {authMode === "forgot" && (
             <div className="space-y-4">
               
               {otpStep === "enter-email" ? (
@@ -315,7 +481,7 @@ export default function AdminLoginPage() {
                       <input
                         type="email"
                         required
-                        placeholder="e.g. yourname@example.com"
+                        placeholder="e.g. basu@gmail.com"
                         value={forgotEmail}
                         onChange={(e) => setForgotEmail(e.target.value)}
                         className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-900/80 border border-white/10 text-white placeholder-gray-600 text-sm focus:border-cyan-400 transition-colors"
@@ -392,8 +558,8 @@ export default function AdminLoginPage() {
                         type="password"
                         required
                         placeholder="Re-type new password"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        value={resetConfirmPassword}
+                        onChange={(e) => setResetConfirmPassword(e.target.value)}
                         className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-gray-900/80 border border-white/10 text-white placeholder-gray-600 text-sm focus:border-cyan-400 transition-colors"
                       />
                     </div>
@@ -442,7 +608,7 @@ export default function AdminLoginPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setIsForgotMode(false);
+                    setAuthMode("signin");
                     setOtpStep("enter-email");
                     setError(null);
                     setOtpSentNotice(null);
