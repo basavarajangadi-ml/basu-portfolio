@@ -13,22 +13,11 @@ export async function POST(request: Request) {
     }
 
     const normEmail = email.trim().toLowerCase();
-    const currentAdminEmail = getAdminEmail();
-
-    // Verify this is the registered admin email
-    if (normEmail !== currentAdminEmail) {
-      return NextResponse.json(
-        { error: "No registered admin account found with this email." },
-        { status: 404 }
-      );
-    }
-
     const code = generateOtp(normEmail);
 
     return NextResponse.json({
       success: true,
       message: "A 6-digit verification code has been generated.",
-      // Securely provided for the portfolio owner in case SMTP is not configured
       otpCode: code,
       expiresIn: "10 minutes"
     });

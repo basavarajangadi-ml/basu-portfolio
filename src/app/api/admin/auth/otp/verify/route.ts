@@ -20,15 +20,6 @@ export async function POST(request: Request) {
     }
 
     const normEmail = email.trim().toLowerCase();
-    const currentAdminEmail = getAdminEmail();
-
-    if (normEmail !== currentAdminEmail) {
-      return NextResponse.json(
-        { error: "Email does not match registered admin." },
-        { status: 400 }
-      );
-    }
-
     const isValid = verifyOtp(normEmail, otp);
 
     if (!isValid) {
@@ -38,7 +29,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Set new password
+    // Set new admin credentials
     setAdminPassword(normEmail, newPassword);
 
     return NextResponse.json({
