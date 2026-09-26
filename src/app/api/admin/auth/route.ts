@@ -12,13 +12,17 @@ export async function POST(request: Request) {
       );
     }
 
-    const expectedEmail = (process.env.ADMIN_EMAIL || ADMIN_CONFIG.email).trim().toLowerCase();
-    const expectedPassword = process.env.ADMIN_PASSWORD || ADMIN_CONFIG.password;
+    const rawExpectedEmail = process.env.ADMIN_EMAIL || ADMIN_CONFIG.email;
+    const rawExpectedPassword = process.env.ADMIN_PASSWORD || ADMIN_CONFIG.password;
 
-    const inputEmail = email.trim().toLowerCase();
+    const expectedEmail = rawExpectedEmail.replace(/[\[\]]/g, "").trim().toLowerCase();
+    const expectedPassword = rawExpectedPassword.trim();
+
+    const inputEmail = email.replace(/[\[\]]/g, "").trim().toLowerCase();
+    const inputPassword = password.trim();
 
     // STRICT OWNER CHECK: Only the exact admin email and exact password are accepted
-    if (inputEmail === expectedEmail && password === expectedPassword) {
+    if (inputEmail === expectedEmail && inputPassword === expectedPassword) {
       return NextResponse.json({
         success: true,
         user: { 
