@@ -1,10 +1,17 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth/AuthContext";
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  themeColor: "#030712",
+};
+
 export const metadata: Metadata = {
-  title: "[YOUR NAME] | AI & Machine Learning Student | Developer",
-  description: "Portfolio of [YOUR NAME], B.Tech AI & ML Student preparing for internships and placements. Explore cutting-edge AI/ML projects, skills, certifications, and technical experience.",
+  title: "Basavaraj M Angadi | AI & Machine Learning Student | Developer",
+  description: "Portfolio of Basavaraj M Angadi, B.Tech AI & ML Student preparing for internships and placements. Explore cutting-edge AI/ML projects, skills, certifications, and technical experience.",
   keywords: [
     "Artificial Intelligence",
     "Machine Learning",
@@ -15,19 +22,19 @@ export const metadata: Metadata = {
     "Python Developer",
     "Student Portfolio"
   ],
-  authors: [{ name: "[YOUR NAME]" }],
-  creator: "[YOUR NAME]",
+  authors: [{ name: "Basavaraj M Angadi" }],
+  creator: "Basavaraj M Angadi",
   openGraph: {
     type: "website",
     locale: "en_US",
-    url: "https://yourportfolio.vercel.app",
-    title: "[YOUR NAME] | AI & Machine Learning Student | Developer",
+    url: "https://basu-portfolio-five.vercel.app",
+    title: "Basavaraj M Angadi | AI & Machine Learning Student | Developer",
     description: "B.Tech AI & ML student portfolio showcasing intelligent systems, deep learning projects, certifications, and technical competencies.",
-    siteName: "[YOUR NAME] Portfolio",
+    siteName: "Basavaraj M Angadi Portfolio",
   },
   twitter: {
     card: "summary_large_image",
-    title: "[YOUR NAME] | AI & Machine Learning Student | Developer",
+    title: "Basavaraj M Angadi | AI & Machine Learning Student | Developer",
     description: "B.Tech AI & ML student portfolio showcasing intelligent systems, deep learning projects, and technical skills.",
   },
   robots: {

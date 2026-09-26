@@ -12,15 +12,15 @@ import {
 
 export const initialProfile: Profile = {
   id: "00000000-0000-0000-0000-000000000001",
-  full_name: "[YOUR NAME]",
+  full_name: "Basavaraj M Angadi",
   tagline: "AI & Machine Learning Student | Developer | Problem Solver",
   short_bio: "I am a B.Tech Artificial Intelligence & Machine Learning student passionate about Artificial Intelligence, Machine Learning, software development, and building real-world applications.",
   career_objective: "Seeking internship and placement opportunities in AI, Machine Learning, and Software Development to leverage analytical problem-solving skills, deep learning architectures, and modern full-stack technologies to build scalable intelligent software.",
   degree: "B.Tech",
   branch: "Artificial Intelligence & Machine Learning",
-  college: "[YOUR COLLEGE]",
-  location: "[LOCATION]",
-  email: "[YOUR EMAIL]",
+  college: "GM University",
+  location: "Davanagere",
+  email: "basumangadi45@gmail.com",
   profile_photo_url: null,
   career_interests: [
     "Artificial Intelligence",
@@ -36,8 +36,8 @@ export const initialProfile: Profile = {
     "API Design & Cloud Architecture",
     "Real-time Computer Vision Pipelines"
   ],
-  github_username: "[GITHUB USERNAME]",
-  linkedin_url: "https://linkedin.com/in/[LINKEDIN URL]",
+  github_username: "basavarajangadi-ml",
+  linkedin_url: "https://github.com/basavarajangadi-ml",
   resume_url: null
 };
 
@@ -89,7 +89,7 @@ export const initialProjects: Project[] = [
       "Sub-200ms latency inference API with ONNX runtime acceleration",
       "HIPAA-conscious data processing pipeline with automated anonymization"
     ],
-    github_url: "https://github.com/[GITHUB USERNAME]/medical-vision-classifier",
+    github_url: "https://github.com/basavarajangadi-ml/medical-vision-classifier",
     live_demo_url: "https://medical-vision-demo.vercel.app",
     date: "2024",
     is_featured: true,
@@ -109,7 +109,7 @@ export const initialProjects: Project[] = [
       "Dynamic interrupt-handling protocol via WebSockets and Web Audio API",
       "Role-specific prompt conditioning with robust guardrails"
     ],
-    github_url: "https://github.com/[GITHUB USERNAME]/neurovoice-agent",
+    github_url: "https://github.com/basavarajangadi-ml/neurovoice-agent",
     live_demo_url: "https://neurovoice.vercel.app",
     date: "2024",
     is_featured: true,
@@ -129,7 +129,7 @@ export const initialProjects: Project[] = [
       "TensorRT FP16 quantization reducing model footprint by 65%",
       "Tested on CARLA simulator benchmark datasets across varied weather conditions"
     ],
-    github_url: "https://github.com/[GITHUB USERNAME]/edgevision-autonomous",
+    github_url: "https://github.com/basavarajangadi-ml/edgevision-autonomous",
     live_demo_url: "",
     date: "2024",
     is_featured: true,
@@ -149,7 +149,7 @@ export const initialProjects: Project[] = [
       "Interactive analytics dashboard built with React and Tailwind CSS",
       "Synthetic transaction generator generating realistic fraud signatures"
     ],
-    github_url: "https://github.com/[GITHUB USERNAME]/fraud-detection-engine",
+    github_url: "https://github.com/basavarajangadi-ml/fraud-detection-engine",
     live_demo_url: "https://fraud-detection-demo.vercel.app",
     date: "2023",
     is_featured: false,
@@ -200,7 +200,7 @@ export const initialEducation: Education[] = [
   {
     id: "e-1",
     degree: "Bachelor of Technology (B.Tech)",
-    institution: "[YOUR COLLEGE]",
+    institution: "GM University",
     branch: "Artificial Intelligence & Machine Learning",
     start_year: "2023",
     end_year: "2027",
@@ -236,7 +236,7 @@ export const initialAchievements: Achievement[] = [
     organization: "National Innovation Challenge",
     date: "2024",
     description: "Built an intelligent assistive diagnostic system in 36 hours, evaluated by industry leaders across technical complexity, scalability, and impact.",
-    link_url: "https://github.com/[GITHUB USERNAME]",
+    link_url: "https://github.com/basavarajangadi-ml",
     order_index: 1
   },
   {
@@ -261,15 +261,15 @@ export const initialAchievements: Achievement[] = [
 ];
 
 export const initialSocialLinks: SocialLink[] = [
-  { id: "sl-1", platform: "GitHub", url: "https://github.com/[GITHUB USERNAME]", icon: "Github", is_active: true, order_index: 1 },
-  { id: "sl-2", platform: "LinkedIn", url: "https://linkedin.com/in/[LINKEDIN URL]", icon: "Linkedin", is_active: true, order_index: 2 },
-  { id: "sl-3", platform: "Email", url: "mailto:[YOUR EMAIL]", icon: "Mail", is_active: true, order_index: 3 }
+  { id: "sl-1", platform: "GitHub", url: "https://github.com/basavarajangadi-ml", icon: "Github", is_active: true, order_index: 1 },
+  { id: "sl-2", platform: "LinkedIn", url: "https://github.com/basavarajangadi-ml", icon: "Linkedin", is_active: true, order_index: 2 },
+  { id: "sl-3", platform: "Email", url: "mailto:basumangadi45@gmail.com", icon: "Mail", is_active: true, order_index: 3 }
 ];
 
 export const initialSettings: PortfolioSettings = {
-  github_username: "[GITHUB USERNAME]",
-  site_title: "[YOUR NAME] | AI & Machine Learning Student | Developer",
-  site_description: "Portfolio of [YOUR NAME], B.Tech AI & ML Student preparing for internships and placements. Explore cutting-edge AI/ML projects, skills, certifications, and technical experience.",
+  github_username: "basavarajangadi-ml",
+  site_title: "Basavaraj M Angadi | AI & Machine Learning Student | Developer",
+  site_description: "Portfolio of Basavaraj M Angadi, B.Tech AI & ML Student preparing for internships and placements. Explore cutting-edge AI/ML projects, skills, certifications, and technical experience.",
   keywords: ["AI Engineer", "Machine Learning", "Deep Learning", "B.Tech AIML", "Software Developer", "Student Portfolio", "Python", "Next.js"],
   allow_contact_form: true
 };

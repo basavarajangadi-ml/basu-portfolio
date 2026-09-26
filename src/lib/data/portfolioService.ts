@@ -35,6 +35,7 @@ const STORAGE_KEYS = {
   SOCIAL: 'portfolio_social_data',
   MESSAGES: 'portfolio_messages_data',
   SETTINGS: 'portfolio_settings_data',
+  SYNCED: 'portfolio_server_synced_v1',
 };
 
 // Helper for client-side storage persistence
@@ -53,23 +54,156 @@ function setLocalItem<T>(key: string, data: T): void {
   try {
     localStorage.setItem(key, JSON.stringify(data));
   } catch (e) {
-    console.error(`Failed to persist to localStorage [${key}]`, e);
+    console.warn(`Failed to persist to localStorage [${key}]`, e);
   }
 }
 
+// Broadcast event to other components and tabs
+function broadcastUpdate(section: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.dispatchEvent(new CustomEvent('portfolio-updated', { detail: { section } }));
+    // Also trigger storage event in other windows
+    localStorage.setItem('portfolio_last_updated', Date.now().toString());
+  } catch {}
+}
+
+// Helper to push section changes to the persistent server API
+async function saveSectionToServer(section: string, data: any): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  try {
+    const res = await fetch('/api/portfolio', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ section, data }),
+    });
+    return res.ok;
+  } catch (err) {
+    console.warn(`Failed to sync [${section}] to server:`, err);
+    return false;
+  }
+}
+
+// Memory cache for the current session
+let serverDataCache: any = null;
+let serverFetchPromise: Promise<any> | null = null;
+
 export const portfolioService = {
+  /**
+   * Fetches all live data from the server's persistent JSON store (/api/portfolio)
+   * Populates client cache and localStorage
+   */
+  async fetchAll() {
+    if (typeof window === 'undefined') return null;
+
+    if (serverFetchPromise) {
+      return serverFetchPromise;
+    }
+
+    serverFetchPromise = (async () => {
+      try {
+        const res = await fetch('/api/portfolio', {
+          cache: 'no-store',
+          headers: { 'Pragma': 'no-cache' }
+        });
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && json.data) {
+            serverDataCache = json.data;
+            
+            // Sync to local storage for offline resiliency
+            if (json.data.profile) setLocalItem(STORAGE_KEYS.PROFILE, json.data.profile);
+            if (json.data.projects) setLocalItem(STORAGE_KEYS.PROJECTS, json.data.projects);
+            if (json.data.certificates) setLocalItem(STORAGE_KEYS.CERTIFICATES, json.data.certificates);
+            if (json.data.skills) setLocalItem(STORAGE_KEYS.SKILLS, json.data.skills);
+            if (json.data.education) setLocalItem(STORAGE_KEYS.EDUCATION, json.data.education);
+            if (json.data.experience) setLocalItem(STORAGE_KEYS.EXPERIENCE, json.data.experience);
+            if (json.data.achievements) setLocalItem(STORAGE_KEYS.ACHIEVEMENTS, json.data.achievements);
+            if (json.data.socialLinks) setLocalItem(STORAGE_KEYS.SOCIAL, json.data.socialLinks);
+            if (json.data.settings) setLocalItem(STORAGE_KEYS.SETTINGS, json.data.settings);
+            if (json.data.messages) setLocalItem(STORAGE_KEYS.MESSAGES, json.data.messages);
+
+            return json.data;
+          }
+        }
+      } catch (err) {
+        console.warn('Could not reach /api/portfolio, using client fallback', err);
+      } finally {
+        serverFetchPromise = null;
+      }
+      return null;
+    })();
+
+    return serverFetchPromise;
+  },
+
+  /**
+   * If the user previously made edits in localStorage before the server API existed,
+   * push those local changes to the server so they are visible on mobile and other devices.
+   */
+  async syncLocalToServerIfAvailable(): Promise<void> {
+    if (typeof window === 'undefined') return;
+    try {
+      const alreadySynced = localStorage.getItem(STORAGE_KEYS.SYNCED);
+      if (alreadySynced) return;
+
+      const localProfile = getLocalItem<Profile | null>(STORAGE_KEYS.PROFILE, null);
+      const isCustomized = localProfile && localProfile.full_name && !localProfile.full_name.includes('[YOUR');
+
+      if (isCustomized) {
+        const fullData = {
+          profile: localProfile,
+          projects: getLocalItem<Project[]>(STORAGE_KEYS.PROJECTS, initialProjects),
+          certificates: getLocalItem<Certificate[]>(STORAGE_KEYS.CERTIFICATES, initialCertificates),
+          skills: getLocalItem<Skill[]>(STORAGE_KEYS.SKILLS, initialSkills),
+          education: getLocalItem<Education[]>(STORAGE_KEYS.EDUCATION, initialEducation),
+          experience: getLocalItem<Experience[]>(STORAGE_KEYS.EXPERIENCE, initialExperience),
+          achievements: getLocalItem<Achievement[]>(STORAGE_KEYS.ACHIEVEMENTS, initialAchievements),
+          socialLinks: getLocalItem<SocialLink[]>(STORAGE_KEYS.SOCIAL, initialSocialLinks),
+          settings: getLocalItem<PortfolioSettings>(STORAGE_KEYS.SETTINGS, initialSettings),
+          messages: getLocalItem<ContactMessage[]>(STORAGE_KEYS.MESSAGES, []),
+        };
+
+        await fetch('/api/portfolio', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fullData }),
+        });
+      }
+      localStorage.setItem(STORAGE_KEYS.SYNCED, 'true');
+    } catch (e) {
+      console.warn('Auto-sync local to server encountered an error:', e);
+    }
+  },
+
   // ----------------------------------------------------
   // PROFILE
   // ----------------------------------------------------
   async getProfile(): Promise<Profile> {
+    // 1. Check server cache if available
+    if (serverDataCache?.profile) {
+      return serverDataCache.profile;
+    }
+
+    // 2. Check live Supabase if active
     if (isSupabaseConfigured() && supabase) {
       try {
         const { data, error } = await supabase.from('profiles').select('*').limit(1).single();
         if (!error && data) return data as Profile;
       } catch (e) {
-        console.warn('Falling back to local profile data', e);
+        console.warn('Falling back to server/local profile data', e);
       }
     }
+
+    // 3. Try fetching from server API
+    if (typeof window !== 'undefined') {
+      try {
+        const full = await this.fetchAll();
+        if (full?.profile) return full.profile;
+      } catch {}
+    }
+
+    // 4. Local storage / initial data fallback
     return getLocalItem<Profile>(STORAGE_KEYS.PROFILE, initialProfile);
   },
 
@@ -81,23 +215,24 @@ export const portfolioService = {
       updated_at: new Date().toISOString()
     };
 
+    // 1. Update memory cache & local storage
+    if (serverDataCache) serverDataCache.profile = updated;
+    setLocalItem(STORAGE_KEYS.PROFILE, updated);
+
+    // 2. Persist to server JSON store
+    await saveSectionToServer('profile', updated);
+
+    // 3. Persist to Supabase if configured
     if (isSupabaseConfigured() && supabase) {
       try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .upsert(updated)
-          .select()
-          .single();
-        if (!error && data) {
-          setLocalItem(STORAGE_KEYS.PROFILE, data);
-          return data as Profile;
-        }
+        await supabase.from('profiles').upsert(updated);
       } catch (e) {
-        console.warn('Supabase update failed, saving locally', e);
+        console.warn('Supabase update failed, persisted locally and to server file', e);
       }
     }
 
-    setLocalItem(STORAGE_KEYS.PROFILE, updated);
+    // 4. Broadcast update event
+    broadcastUpdate('profile');
     return updated;
   },
 
@@ -105,6 +240,8 @@ export const portfolioService = {
   // PROJECTS
   // ----------------------------------------------------
   async getProjects(): Promise<Project[]> {
+    if (serverDataCache?.projects) return serverDataCache.projects;
+
     if (isSupabaseConfigured() && supabase) {
       try {
         const { data, error } = await supabase
@@ -113,57 +250,47 @@ export const portfolioService = {
           .order('order_index', { ascending: true });
         if (!error && data) return data as Project[];
       } catch (e) {
-        console.warn('Falling back to local projects', e);
+        console.warn('Falling back to server/local projects', e);
       }
     }
+
+    if (typeof window !== 'undefined') {
+      try {
+        const full = await this.fetchAll();
+        if (full?.projects) return full.projects;
+      } catch {}
+    }
+
     return getLocalItem<Project[]>(STORAGE_KEYS.PROJECTS, initialProjects);
   },
 
   async createProject(item: Omit<Project, 'id'>): Promise<Project> {
+    const current = await this.getProjects();
     const newItem: Project = {
       ...item,
       id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `p-${Date.now()}`,
       created_at: new Date().toISOString()
     };
 
+    const updatedList = [newItem, ...current];
+    if (serverDataCache) serverDataCache.projects = updatedList;
+    setLocalItem(STORAGE_KEYS.PROJECTS, updatedList);
+
+    await saveSectionToServer('projects', updatedList);
+
     if (isSupabaseConfigured() && supabase) {
       try {
-        const { data, error } = await supabase.from('projects').insert(newItem).select().single();
-        if (!error && data) {
-          const list = await this.getProjects();
-          setLocalItem(STORAGE_KEYS.PROJECTS, [...list, data]);
-          return data as Project;
-        }
+        await supabase.from('projects').insert(newItem);
       } catch (e) {
-        console.warn('Supabase project insert failed, saving locally', e);
+        console.warn('Supabase project insert failed', e);
       }
     }
 
-    const current = await this.getProjects();
-    const updated = [newItem, ...current];
-    setLocalItem(STORAGE_KEYS.PROJECTS, updated);
+    broadcastUpdate('projects');
     return newItem;
   },
 
   async updateProject(id: string, updates: Partial<Project>): Promise<Project> {
-    if (isSupabaseConfigured() && supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('projects')
-          .update(updates)
-          .eq('id', id)
-          .select()
-          .single();
-        if (!error && data) {
-          const list = await this.getProjects();
-          setLocalItem(STORAGE_KEYS.PROJECTS, list.map(p => p.id === id ? data : p));
-          return data as Project;
-        }
-      } catch (e) {
-        console.warn('Supabase project update failed, falling back locally', e);
-      }
-    }
-
     const current = await this.getProjects();
     let updatedItem: Project | null = null;
     const updatedList = current.map(p => {
@@ -173,11 +300,33 @@ export const portfolioService = {
       }
       return p;
     });
+
+    if (serverDataCache) serverDataCache.projects = updatedList;
     setLocalItem(STORAGE_KEYS.PROJECTS, updatedList);
+
+    await saveSectionToServer('projects', updatedList);
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from('projects').update(updates).eq('id', id);
+      } catch (e) {
+        console.warn('Supabase project update failed', e);
+      }
+    }
+
+    broadcastUpdate('projects');
     return updatedItem || ({ ...updates, id } as Project);
   },
 
   async deleteProject(id: string): Promise<boolean> {
+    const current = await this.getProjects();
+    const updated = current.filter(p => p.id !== id);
+
+    if (serverDataCache) serverDataCache.projects = updated;
+    setLocalItem(STORAGE_KEYS.PROJECTS, updated);
+
+    await saveSectionToServer('projects', updated);
+
     if (isSupabaseConfigured() && supabase) {
       try {
         await supabase.from('projects').delete().eq('id', id);
@@ -186,9 +335,7 @@ export const portfolioService = {
       }
     }
 
-    const current = await this.getProjects();
-    const updated = current.filter(p => p.id !== id);
-    setLocalItem(STORAGE_KEYS.PROJECTS, updated);
+    broadcastUpdate('projects');
     return true;
   },
 
@@ -196,6 +343,8 @@ export const portfolioService = {
   // CERTIFICATES
   // ----------------------------------------------------
   async getCertificates(): Promise<Certificate[]> {
+    if (serverDataCache?.certificates) return serverDataCache.certificates;
+
     if (isSupabaseConfigured() && supabase) {
       try {
         const { data, error } = await supabase.from('certificates').select('*').order('created_at', { ascending: false });
@@ -204,54 +353,44 @@ export const portfolioService = {
         console.warn('Falling back to local certificates', e);
       }
     }
+
+    if (typeof window !== 'undefined') {
+      try {
+        const full = await this.fetchAll();
+        if (full?.certificates) return full.certificates;
+      } catch {}
+    }
+
     return getLocalItem<Certificate[]>(STORAGE_KEYS.CERTIFICATES, initialCertificates);
   },
 
   async createCertificate(item: Omit<Certificate, 'id'>): Promise<Certificate> {
+    const current = await this.getCertificates();
     const newItem: Certificate = {
       ...item,
       id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `c-${Date.now()}`,
       created_at: new Date().toISOString()
     };
 
+    const updated = [newItem, ...current];
+    if (serverDataCache) serverDataCache.certificates = updated;
+    setLocalItem(STORAGE_KEYS.CERTIFICATES, updated);
+
+    await saveSectionToServer('certificates', updated);
+
     if (isSupabaseConfigured() && supabase) {
       try {
-        const { data, error } = await supabase.from('certificates').insert(newItem).select().single();
-        if (!error && data) {
-          const list = await this.getCertificates();
-          setLocalItem(STORAGE_KEYS.CERTIFICATES, [data, ...list]);
-          return data as Certificate;
-        }
+        await supabase.from('certificates').insert(newItem);
       } catch (e) {
         console.warn('Supabase certificate insert failed', e);
       }
     }
 
-    const current = await this.getCertificates();
-    const updated = [newItem, ...current];
-    setLocalItem(STORAGE_KEYS.CERTIFICATES, updated);
+    broadcastUpdate('certificates');
     return newItem;
   },
 
   async updateCertificate(id: string, updates: Partial<Certificate>): Promise<Certificate> {
-    if (isSupabaseConfigured() && supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('certificates')
-          .update(updates)
-          .eq('id', id)
-          .select()
-          .single();
-        if (!error && data) {
-          const list = await this.getCertificates();
-          setLocalItem(STORAGE_KEYS.CERTIFICATES, list.map(c => c.id === id ? data : c));
-          return data as Certificate;
-        }
-      } catch (e) {
-        console.warn('Supabase cert update failed', e);
-      }
-    }
-
     const current = await this.getCertificates();
     let updatedItem: Certificate | null = null;
     const updated = current.map(c => {
@@ -261,11 +400,33 @@ export const portfolioService = {
       }
       return c;
     });
+
+    if (serverDataCache) serverDataCache.certificates = updated;
     setLocalItem(STORAGE_KEYS.CERTIFICATES, updated);
+
+    await saveSectionToServer('certificates', updated);
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from('certificates').update(updates).eq('id', id);
+      } catch (e) {
+        console.warn('Supabase cert update failed', e);
+      }
+    }
+
+    broadcastUpdate('certificates');
     return updatedItem || ({ ...updates, id } as Certificate);
   },
 
   async deleteCertificate(id: string): Promise<boolean> {
+    const current = await this.getCertificates();
+    const updated = current.filter(c => c.id !== id);
+
+    if (serverDataCache) serverDataCache.certificates = updated;
+    setLocalItem(STORAGE_KEYS.CERTIFICATES, updated);
+
+    await saveSectionToServer('certificates', updated);
+
     if (isSupabaseConfigured() && supabase) {
       try {
         await supabase.from('certificates').delete().eq('id', id);
@@ -274,9 +435,7 @@ export const portfolioService = {
       }
     }
 
-    const current = await this.getCertificates();
-    const updated = current.filter(c => c.id !== id);
-    setLocalItem(STORAGE_KEYS.CERTIFICATES, updated);
+    broadcastUpdate('certificates');
     return true;
   },
 
@@ -284,6 +443,8 @@ export const portfolioService = {
   // SKILLS
   // ----------------------------------------------------
   async getSkills(): Promise<Skill[]> {
+    if (serverDataCache?.skills) return serverDataCache.skills;
+
     if (isSupabaseConfigured() && supabase) {
       try {
         const { data, error } = await supabase.from('skills').select('*').order('order_index', { ascending: true });
@@ -292,6 +453,14 @@ export const portfolioService = {
         console.warn('Falling back to local skills', e);
       }
     }
+
+    if (typeof window !== 'undefined') {
+      try {
+        const full = await this.fetchAll();
+        if (full?.skills) return full.skills;
+      } catch {}
+    }
+
     return getLocalItem<Skill[]>(STORAGE_KEYS.SKILLS, initialSkills);
   },
 
@@ -304,37 +473,25 @@ export const portfolioService = {
       created_at: new Date().toISOString()
     };
 
+    const updated = [...current, newItem];
+    if (serverDataCache) serverDataCache.skills = updated;
+    setLocalItem(STORAGE_KEYS.SKILLS, updated);
+
+    await saveSectionToServer('skills', updated);
+
     if (isSupabaseConfigured() && supabase) {
       try {
-        const { data, error } = await supabase.from('skills').insert(newItem).select().single();
-        if (!error && data) {
-          setLocalItem(STORAGE_KEYS.SKILLS, [...current, data]);
-          return data as Skill;
-        }
+        await supabase.from('skills').insert(newItem);
       } catch (e) {
         console.warn('Supabase skill insert failed', e);
       }
     }
 
-    const updated = [...current, newItem];
-    setLocalItem(STORAGE_KEYS.SKILLS, updated);
+    broadcastUpdate('skills');
     return newItem;
   },
 
   async updateSkill(id: string, updates: Partial<Skill>): Promise<Skill> {
-    if (isSupabaseConfigured() && supabase) {
-      try {
-        const { data, error } = await supabase.from('skills').update(updates).eq('id', id).select().single();
-        if (!error && data) {
-          const list = await this.getSkills();
-          setLocalItem(STORAGE_KEYS.SKILLS, list.map(s => s.id === id ? data : s));
-          return data as Skill;
-        }
-      } catch (e) {
-        console.warn('Supabase skill update failed', e);
-      }
-    }
-
     const current = await this.getSkills();
     let updatedItem: Skill | null = null;
     const updated = current.map(s => {
@@ -344,11 +501,33 @@ export const portfolioService = {
       }
       return s;
     });
+
+    if (serverDataCache) serverDataCache.skills = updated;
     setLocalItem(STORAGE_KEYS.SKILLS, updated);
+
+    await saveSectionToServer('skills', updated);
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from('skills').update(updates).eq('id', id);
+      } catch (e) {
+        console.warn('Supabase skill update failed', e);
+      }
+    }
+
+    broadcastUpdate('skills');
     return updatedItem || ({ ...updates, id } as Skill);
   },
 
   async deleteSkill(id: string): Promise<boolean> {
+    const current = await this.getSkills();
+    const updated = current.filter(s => s.id !== id);
+
+    if (serverDataCache) serverDataCache.skills = updated;
+    setLocalItem(STORAGE_KEYS.SKILLS, updated);
+
+    await saveSectionToServer('skills', updated);
+
     if (isSupabaseConfigured() && supabase) {
       try {
         await supabase.from('skills').delete().eq('id', id);
@@ -357,15 +536,17 @@ export const portfolioService = {
       }
     }
 
-    const current = await this.getSkills();
-    const updated = current.filter(s => s.id !== id);
-    setLocalItem(STORAGE_KEYS.SKILLS, updated);
+    broadcastUpdate('skills');
     return true;
   },
 
   async reorderSkills(orderedSkills: Skill[]): Promise<void> {
     const updated = orderedSkills.map((s, idx) => ({ ...s, order_index: idx + 1 }));
+
+    if (serverDataCache) serverDataCache.skills = updated;
     setLocalItem(STORAGE_KEYS.SKILLS, updated);
+
+    await saveSectionToServer('skills', updated);
 
     if (isSupabaseConfigured() && supabase) {
       try {
@@ -376,12 +557,16 @@ export const portfolioService = {
         console.warn('Supabase reorder failed', e);
       }
     }
+
+    broadcastUpdate('skills');
   },
 
   // ----------------------------------------------------
   // EDUCATION
   // ----------------------------------------------------
   async getEducation(): Promise<Education[]> {
+    if (serverDataCache?.education) return serverDataCache.education;
+
     if (isSupabaseConfigured() && supabase) {
       try {
         const { data, error } = await supabase.from('education').select('*').order('order_index', { ascending: true });
@@ -390,49 +575,44 @@ export const portfolioService = {
         console.warn('Falling back to local education', e);
       }
     }
+
+    if (typeof window !== 'undefined') {
+      try {
+        const full = await this.fetchAll();
+        if (full?.education) return full.education;
+      } catch {}
+    }
+
     return getLocalItem<Education[]>(STORAGE_KEYS.EDUCATION, initialEducation);
   },
 
   async createEducation(item: Omit<Education, 'id'>): Promise<Education> {
+    const current = await this.getEducation();
     const newItem: Education = {
       ...item,
       id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `e-${Date.now()}`,
       created_at: new Date().toISOString()
     };
 
+    const updated = [...current, newItem];
+    if (serverDataCache) serverDataCache.education = updated;
+    setLocalItem(STORAGE_KEYS.EDUCATION, updated);
+
+    await saveSectionToServer('education', updated);
+
     if (isSupabaseConfigured() && supabase) {
       try {
-        const { data, error } = await supabase.from('education').insert(newItem).select().single();
-        if (!error && data) {
-          const list = await this.getEducation();
-          setLocalItem(STORAGE_KEYS.EDUCATION, [...list, data]);
-          return data as Education;
-        }
+        await supabase.from('education').insert(newItem);
       } catch (e) {
         console.warn('Supabase education insert failed', e);
       }
     }
 
-    const current = await this.getEducation();
-    const updated = [...current, newItem];
-    setLocalItem(STORAGE_KEYS.EDUCATION, updated);
+    broadcastUpdate('education');
     return newItem;
   },
 
   async updateEducation(id: string, updates: Partial<Education>): Promise<Education> {
-    if (isSupabaseConfigured() && supabase) {
-      try {
-        const { data, error } = await supabase.from('education').update(updates).eq('id', id).select().single();
-        if (!error && data) {
-          const list = await this.getEducation();
-          setLocalItem(STORAGE_KEYS.EDUCATION, list.map(e => e.id === id ? data : e));
-          return data as Education;
-        }
-      } catch (e) {
-        console.warn('Supabase edu update failed', e);
-      }
-    }
-
     const current = await this.getEducation();
     let updatedItem: Education | null = null;
     const updated = current.map(e => {
@@ -442,11 +622,33 @@ export const portfolioService = {
       }
       return e;
     });
+
+    if (serverDataCache) serverDataCache.education = updated;
     setLocalItem(STORAGE_KEYS.EDUCATION, updated);
+
+    await saveSectionToServer('education', updated);
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from('education').update(updates).eq('id', id);
+      } catch (e) {
+        console.warn('Supabase edu update failed', e);
+      }
+    }
+
+    broadcastUpdate('education');
     return updatedItem || ({ ...updates, id } as Education);
   },
 
   async deleteEducation(id: string): Promise<boolean> {
+    const current = await this.getEducation();
+    const updated = current.filter(e => e.id !== id);
+
+    if (serverDataCache) serverDataCache.education = updated;
+    setLocalItem(STORAGE_KEYS.EDUCATION, updated);
+
+    await saveSectionToServer('education', updated);
+
     if (isSupabaseConfigured() && supabase) {
       try {
         await supabase.from('education').delete().eq('id', id);
@@ -455,9 +657,7 @@ export const portfolioService = {
       }
     }
 
-    const current = await this.getEducation();
-    const updated = current.filter(e => e.id !== id);
-    setLocalItem(STORAGE_KEYS.EDUCATION, updated);
+    broadcastUpdate('education');
     return true;
   },
 
@@ -465,6 +665,8 @@ export const portfolioService = {
   // EXPERIENCE / INTERNSHIPS
   // ----------------------------------------------------
   async getExperience(): Promise<Experience[]> {
+    if (serverDataCache?.experience) return serverDataCache.experience;
+
     if (isSupabaseConfigured() && supabase) {
       try {
         const { data, error } = await supabase.from('experience').select('*').order('order_index', { ascending: true });
@@ -473,49 +675,44 @@ export const portfolioService = {
         console.warn('Falling back to local experience', e);
       }
     }
+
+    if (typeof window !== 'undefined') {
+      try {
+        const full = await this.fetchAll();
+        if (full?.experience) return full.experience;
+      } catch {}
+    }
+
     return getLocalItem<Experience[]>(STORAGE_KEYS.EXPERIENCE, initialExperience);
   },
 
   async createExperience(item: Omit<Experience, 'id'>): Promise<Experience> {
+    const current = await this.getExperience();
     const newItem: Experience = {
       ...item,
       id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `exp-${Date.now()}`,
       created_at: new Date().toISOString()
     };
 
+    const updated = [newItem, ...current];
+    if (serverDataCache) serverDataCache.experience = updated;
+    setLocalItem(STORAGE_KEYS.EXPERIENCE, updated);
+
+    await saveSectionToServer('experience', updated);
+
     if (isSupabaseConfigured() && supabase) {
       try {
-        const { data, error } = await supabase.from('experience').insert(newItem).select().single();
-        if (!error && data) {
-          const list = await this.getExperience();
-          setLocalItem(STORAGE_KEYS.EXPERIENCE, [...list, data]);
-          return data as Experience;
-        }
+        await supabase.from('experience').insert(newItem);
       } catch (e) {
         console.warn('Supabase exp insert failed', e);
       }
     }
 
-    const current = await this.getExperience();
-    const updated = [newItem, ...current];
-    setLocalItem(STORAGE_KEYS.EXPERIENCE, updated);
+    broadcastUpdate('experience');
     return newItem;
   },
 
   async updateExperience(id: string, updates: Partial<Experience>): Promise<Experience> {
-    if (isSupabaseConfigured() && supabase) {
-      try {
-        const { data, error } = await supabase.from('experience').update(updates).eq('id', id).select().single();
-        if (!error && data) {
-          const list = await this.getExperience();
-          setLocalItem(STORAGE_KEYS.EXPERIENCE, list.map(exp => exp.id === id ? data : exp));
-          return data as Experience;
-        }
-      } catch (e) {
-        console.warn('Supabase exp update failed', e);
-      }
-    }
-
     const current = await this.getExperience();
     let updatedItem: Experience | null = null;
     const updated = current.map(exp => {
@@ -525,11 +722,33 @@ export const portfolioService = {
       }
       return exp;
     });
+
+    if (serverDataCache) serverDataCache.experience = updated;
     setLocalItem(STORAGE_KEYS.EXPERIENCE, updated);
+
+    await saveSectionToServer('experience', updated);
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from('experience').update(updates).eq('id', id);
+      } catch (e) {
+        console.warn('Supabase exp update failed', e);
+      }
+    }
+
+    broadcastUpdate('experience');
     return updatedItem || ({ ...updates, id } as Experience);
   },
 
   async deleteExperience(id: string): Promise<boolean> {
+    const current = await this.getExperience();
+    const updated = current.filter(exp => exp.id !== id);
+
+    if (serverDataCache) serverDataCache.experience = updated;
+    setLocalItem(STORAGE_KEYS.EXPERIENCE, updated);
+
+    await saveSectionToServer('experience', updated);
+
     if (isSupabaseConfigured() && supabase) {
       try {
         await supabase.from('experience').delete().eq('id', id);
@@ -538,9 +757,7 @@ export const portfolioService = {
       }
     }
 
-    const current = await this.getExperience();
-    const updated = current.filter(exp => exp.id !== id);
-    setLocalItem(STORAGE_KEYS.EXPERIENCE, updated);
+    broadcastUpdate('experience');
     return true;
   },
 
@@ -548,6 +765,8 @@ export const portfolioService = {
   // ACHIEVEMENTS
   // ----------------------------------------------------
   async getAchievements(): Promise<Achievement[]> {
+    if (serverDataCache?.achievements) return serverDataCache.achievements;
+
     if (isSupabaseConfigured() && supabase) {
       try {
         const { data, error } = await supabase.from('achievements').select('*').order('order_index', { ascending: true });
@@ -556,49 +775,44 @@ export const portfolioService = {
         console.warn('Falling back to local achievements', e);
       }
     }
+
+    if (typeof window !== 'undefined') {
+      try {
+        const full = await this.fetchAll();
+        if (full?.achievements) return full.achievements;
+      } catch {}
+    }
+
     return getLocalItem<Achievement[]>(STORAGE_KEYS.ACHIEVEMENTS, initialAchievements);
   },
 
   async createAchievement(item: Omit<Achievement, 'id'>): Promise<Achievement> {
+    const current = await this.getAchievements();
     const newItem: Achievement = {
       ...item,
       id: typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `a-${Date.now()}`,
       created_at: new Date().toISOString()
     };
 
+    const updated = [newItem, ...current];
+    if (serverDataCache) serverDataCache.achievements = updated;
+    setLocalItem(STORAGE_KEYS.ACHIEVEMENTS, updated);
+
+    await saveSectionToServer('achievements', updated);
+
     if (isSupabaseConfigured() && supabase) {
       try {
-        const { data, error } = await supabase.from('achievements').insert(newItem).select().single();
-        if (!error && data) {
-          const list = await this.getAchievements();
-          setLocalItem(STORAGE_KEYS.ACHIEVEMENTS, [data, ...list]);
-          return data as Achievement;
-        }
+        await supabase.from('achievements').insert(newItem);
       } catch (e) {
         console.warn('Supabase achievement insert failed', e);
       }
     }
 
-    const current = await this.getAchievements();
-    const updated = [newItem, ...current];
-    setLocalItem(STORAGE_KEYS.ACHIEVEMENTS, updated);
+    broadcastUpdate('achievements');
     return newItem;
   },
 
   async updateAchievement(id: string, updates: Partial<Achievement>): Promise<Achievement> {
-    if (isSupabaseConfigured() && supabase) {
-      try {
-        const { data, error } = await supabase.from('achievements').update(updates).eq('id', id).select().single();
-        if (!error && data) {
-          const list = await this.getAchievements();
-          setLocalItem(STORAGE_KEYS.ACHIEVEMENTS, list.map(a => a.id === id ? data : a));
-          return data as Achievement;
-        }
-      } catch (e) {
-        console.warn('Supabase achievement update failed', e);
-      }
-    }
-
     const current = await this.getAchievements();
     let updatedItem: Achievement | null = null;
     const updated = current.map(a => {
@@ -608,11 +822,33 @@ export const portfolioService = {
       }
       return a;
     });
+
+    if (serverDataCache) serverDataCache.achievements = updated;
     setLocalItem(STORAGE_KEYS.ACHIEVEMENTS, updated);
+
+    await saveSectionToServer('achievements', updated);
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from('achievements').update(updates).eq('id', id);
+      } catch (e) {
+        console.warn('Supabase achievement update failed', e);
+      }
+    }
+
+    broadcastUpdate('achievements');
     return updatedItem || ({ ...updates, id } as Achievement);
   },
 
   async deleteAchievement(id: string): Promise<boolean> {
+    const current = await this.getAchievements();
+    const updated = current.filter(a => a.id !== id);
+
+    if (serverDataCache) serverDataCache.achievements = updated;
+    setLocalItem(STORAGE_KEYS.ACHIEVEMENTS, updated);
+
+    await saveSectionToServer('achievements', updated);
+
     if (isSupabaseConfigured() && supabase) {
       try {
         await supabase.from('achievements').delete().eq('id', id);
@@ -621,9 +857,7 @@ export const portfolioService = {
       }
     }
 
-    const current = await this.getAchievements();
-    const updated = current.filter(a => a.id !== id);
-    setLocalItem(STORAGE_KEYS.ACHIEVEMENTS, updated);
+    broadcastUpdate('achievements');
     return true;
   },
 
@@ -631,6 +865,8 @@ export const portfolioService = {
   // SOCIAL LINKS
   // ----------------------------------------------------
   async getSocialLinks(): Promise<SocialLink[]> {
+    if (serverDataCache?.socialLinks) return serverDataCache.socialLinks;
+
     if (isSupabaseConfigured() && supabase) {
       try {
         const { data, error } = await supabase.from('social_links').select('*').order('order_index', { ascending: true });
@@ -639,6 +875,14 @@ export const portfolioService = {
         console.warn('Falling back to local social links', e);
       }
     }
+
+    if (typeof window !== 'undefined') {
+      try {
+        const full = await this.fetchAll();
+        if (full?.socialLinks) return full.socialLinks;
+      } catch {}
+    }
+
     return getLocalItem<SocialLink[]>(STORAGE_KEYS.SOCIAL, initialSocialLinks);
   },
 
@@ -659,6 +903,11 @@ export const portfolioService = {
       updated = [...current, target];
     }
 
+    if (serverDataCache) serverDataCache.socialLinks = updated;
+    setLocalItem(STORAGE_KEYS.SOCIAL, updated);
+
+    await saveSectionToServer('socialLinks', updated);
+
     if (isSupabaseConfigured() && supabase) {
       try {
         await supabase.from('social_links').upsert(target);
@@ -667,11 +916,19 @@ export const portfolioService = {
       }
     }
 
-    setLocalItem(STORAGE_KEYS.SOCIAL, updated);
+    broadcastUpdate('socialLinks');
     return target;
   },
 
   async deleteSocialLink(id: string): Promise<boolean> {
+    const current = await this.getSocialLinks();
+    const updated = current.filter(s => s.id !== id);
+
+    if (serverDataCache) serverDataCache.socialLinks = updated;
+    setLocalItem(STORAGE_KEYS.SOCIAL, updated);
+
+    await saveSectionToServer('socialLinks', updated);
+
     if (isSupabaseConfigured() && supabase) {
       try {
         await supabase.from('social_links').delete().eq('id', id);
@@ -680,9 +937,7 @@ export const portfolioService = {
       }
     }
 
-    const current = await this.getSocialLinks();
-    const updated = current.filter(s => s.id !== id);
-    setLocalItem(STORAGE_KEYS.SOCIAL, updated);
+    broadcastUpdate('socialLinks');
     return true;
   },
 
@@ -690,6 +945,8 @@ export const portfolioService = {
   // CONTACT MESSAGES
   // ----------------------------------------------------
   async getContactMessages(): Promise<ContactMessage[]> {
+    if (serverDataCache?.messages) return serverDataCache.messages;
+
     if (isSupabaseConfigured() && supabase) {
       try {
         const { data, error } = await supabase.from('contact_messages').select('*').order('created_at', { ascending: false });
@@ -698,6 +955,14 @@ export const portfolioService = {
         console.warn('Falling back to local messages', e);
       }
     }
+
+    if (typeof window !== 'undefined') {
+      try {
+        const full = await this.fetchAll();
+        if (full?.messages) return full.messages;
+      } catch {}
+    }
+
     return getLocalItem<ContactMessage[]>(STORAGE_KEYS.MESSAGES, []);
   },
 
@@ -709,6 +974,14 @@ export const portfolioService = {
       created_at: new Date().toISOString()
     };
 
+    const current = await this.getContactMessages();
+    const updated = [newMsg, ...current];
+
+    if (serverDataCache) serverDataCache.messages = updated;
+    setLocalItem(STORAGE_KEYS.MESSAGES, updated);
+
+    await saveSectionToServer('messages', updated);
+
     if (isSupabaseConfigured() && supabase) {
       try {
         await supabase.from('contact_messages').insert(newMsg);
@@ -717,12 +990,19 @@ export const portfolioService = {
       }
     }
 
-    const current = await this.getContactMessages();
-    setLocalItem(STORAGE_KEYS.MESSAGES, [newMsg, ...current]);
+    broadcastUpdate('messages');
     return newMsg;
   },
 
   async markMessageAsRead(id: string): Promise<void> {
+    const current = await this.getContactMessages();
+    const updated = current.map(m => m.id === id ? { ...m, is_read: true } : m);
+
+    if (serverDataCache) serverDataCache.messages = updated;
+    setLocalItem(STORAGE_KEYS.MESSAGES, updated);
+
+    await saveSectionToServer('messages', updated);
+
     if (isSupabaseConfigured() && supabase) {
       try {
         await supabase.from('contact_messages').update({ is_read: true }).eq('id', id);
@@ -731,11 +1011,18 @@ export const portfolioService = {
       }
     }
 
-    const current = await this.getContactMessages();
-    setLocalItem(STORAGE_KEYS.MESSAGES, current.map(m => m.id === id ? { ...m, is_read: true } : m));
+    broadcastUpdate('messages');
   },
 
   async deleteContactMessage(id: string): Promise<void> {
+    const current = await this.getContactMessages();
+    const updated = current.filter(m => m.id !== id);
+
+    if (serverDataCache) serverDataCache.messages = updated;
+    setLocalItem(STORAGE_KEYS.MESSAGES, updated);
+
+    await saveSectionToServer('messages', updated);
+
     if (isSupabaseConfigured() && supabase) {
       try {
         await supabase.from('contact_messages').delete().eq('id', id);
@@ -744,26 +1031,40 @@ export const portfolioService = {
       }
     }
 
-    const current = await this.getContactMessages();
-    setLocalItem(STORAGE_KEYS.MESSAGES, current.filter(m => m.id !== id));
+    broadcastUpdate('messages');
   },
 
   // ----------------------------------------------------
   // SETTINGS
   // ----------------------------------------------------
   async getSettings(): Promise<PortfolioSettings> {
+    if (serverDataCache?.settings) return serverDataCache.settings;
+
+    if (typeof window !== 'undefined') {
+      try {
+        const full = await this.fetchAll();
+        if (full?.settings) return full.settings;
+      } catch {}
+    }
+
     return getLocalItem<PortfolioSettings>(STORAGE_KEYS.SETTINGS, initialSettings);
   },
 
   async updateSettings(updates: Partial<PortfolioSettings>): Promise<PortfolioSettings> {
     const current = await this.getSettings();
     const updated = { ...current, ...updates };
+
+    if (serverDataCache) serverDataCache.settings = updated;
     setLocalItem(STORAGE_KEYS.SETTINGS, updated);
+
+    await saveSectionToServer('settings', updated);
+
+    broadcastUpdate('settings');
     return updated;
   },
 
   // ----------------------------------------------------
-  // STATISTICS (Accurate counts directly from real content)
+  // STATISTICS
   // ----------------------------------------------------
   async getStats() {
     const [projects, certificates, skills, achievements, experience] = await Promise.all([

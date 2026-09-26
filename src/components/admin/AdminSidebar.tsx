@@ -65,6 +65,14 @@ export default function AdminSidebar() {
         </button>
       </div>
 
+      {/* Mobile Backdrop Overlay */}
+      {mobileOpen && (
+        <div 
+          onClick={() => setMobileOpen(false)} 
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 lg:hidden"
+        />
+      )}
+
       {/* Sidebar Container */}
       <aside className={`
         fixed lg:sticky top-0 left-0 z-40 h-screen w-64 bg-[#080d1a] border-r border-white/10 flex flex-col justify-between transition-transform duration-300

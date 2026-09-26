@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { portfolioService } from "@/lib/data/portfolioService";
+import { getPortfolioData, savePortfolioData } from "@/lib/server/portfolioStorage";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase/client";
+import { ContactMessage } from "@/lib/supabase/types";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
@@ -26,14 +30,31 @@ export async function POST(request: Request) {
       );
     }
 
-    const saved = await portfolioService.submitContactMessage({
+    const newMsg: ContactMessage = {
+      id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `msg-${Date.now()}`,
       name,
       email,
       subject: subject || "Portfolio Inquiry",
       message,
-    });
+      is_read: false,
+      created_at: new Date().toISOString(),
+    };
 
-    return NextResponse.json({ success: true, data: saved });
+    // Save to persistent server store
+    const full = await getPortfolioData();
+    full.messages = [newMsg, ...(full.messages || [])];
+    await savePortfolioData(full);
+
+    // Also insert to Supabase if configured
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from("contact_messages").insert(newMsg);
+      } catch (e) {
+        console.warn("Supabase message insert error:", e);
+      }
+    }
+
+    return NextResponse.json({ success: true, data: newMsg });
   } catch (err: any) {
     console.error("Contact API error:", err);
     return NextResponse.json(

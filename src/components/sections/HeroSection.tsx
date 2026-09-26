@@ -188,7 +188,7 @@ export default function HeroSection({ profile, socialLinks }: HeroSectionProps) 
                       <Brain className="w-10 h-10" />
                     </div>
                     <span className="text-xl font-bold text-white tracking-wider font-mono">
-                      {profile.full_name === "[YOUR NAME]" ? "AI DEVELOPER" : profile.full_name}
+                      {profile.full_name && !profile.full_name.includes("[YOUR") ? profile.full_name : "Basavaraj M Angadi"}
                     </span>
                     <span className="text-xs text-cyan-400 mt-1 font-mono">
                       B.Tech AI & ML

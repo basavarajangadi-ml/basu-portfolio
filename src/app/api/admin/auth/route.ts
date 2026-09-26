@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import { ADMIN_CONFIG } from "@/lib/auth/adminConfig";
+import { verifyAdminCredentials, getAdminAuth } from "@/lib/server/adminAuthStorage";
+
+export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   try {
@@ -12,34 +14,22 @@ export async function POST(request: Request) {
       );
     }
 
-    const rawExpectedEmail = process.env.ADMIN_EMAIL || ADMIN_CONFIG.email;
-    const rawExpectedPassword = process.env.ADMIN_PASSWORD || ADMIN_CONFIG.password;
+    const isValid = await verifyAdminCredentials(email, password);
 
-    const expectedEmail = rawExpectedEmail.replace(/[\[\]]/g, "").trim().toLowerCase();
-    const expectedPassword = rawExpectedPassword.trim();
-
-    const inputEmail = email.replace(/[\[\]]/g, "").trim().toLowerCase();
-    const inputPassword = password.trim();
-
-    // STRICT OWNER CHECK: Only the owner's exact credentials are valid
-    const isOwner =
-      (inputEmail === expectedEmail && inputPassword === expectedPassword) ||
-      (inputEmail === "basumangadi45@gmail.com" && (inputPassword === "Basu@#7097@#" || inputPassword === expectedPassword)) ||
-      (inputEmail === "admin@example.com" && inputPassword === "Basu@Admin2026");
-
-    if (isOwner) {
+    if (isValid) {
+      const auth = await getAdminAuth();
       return NextResponse.json({
         success: true,
         user: { 
           id: "admin-secure-id", 
-          email: inputEmail, 
+          email: auth.email, 
           role: "admin" 
         }
       });
     }
 
     return NextResponse.json(
-      { error: "Access denied. Only the portfolio owner can sign in." },
+      { error: "Access denied. Invalid admin email or password." },
       { status: 401 }
     );
   } catch (err: any) {

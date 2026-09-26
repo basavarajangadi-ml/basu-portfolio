@@ -8,6 +8,8 @@ import { Profile } from "@/lib/supabase/types";
 
 export default function AdminProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [careerInterestsStr, setCareerInterestsStr] = useState("");
+  const [technicalInterestsStr, setTechnicalInterestsStr] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -15,6 +17,8 @@ export default function AdminProfilePage() {
   useEffect(() => {
     portfolioService.getProfile().then((data) => {
       setProfile(data);
+      setCareerInterestsStr(data.career_interests?.join(", ") || "");
+      setTechnicalInterestsStr(data.technical_interests?.join(", ") || "");
       setLoading(false);
     });
   }, []);
@@ -27,7 +31,12 @@ export default function AdminProfilePage() {
     setSuccess(false);
 
     try {
-      const updated = await portfolioService.updateProfile(profile);
+      const payload: Profile = {
+        ...profile,
+        career_interests: careerInterestsStr.split(",").map(s => s.trim()).filter(Boolean),
+        technical_interests: technicalInterestsStr.split(",").map(s => s.trim()).filter(Boolean),
+      };
+      const updated = await portfolioService.updateProfile(payload);
       setProfile(updated);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
@@ -197,11 +206,9 @@ export default function AdminProfilePage() {
             </label>
             <input
               type="text"
-              value={profile.career_interests?.join(", ") || ""}
-              onChange={(e) => setProfile({ 
-                ...profile, 
-                career_interests: e.target.value.split(",").map(s => s.trim()).filter(Boolean) 
-              })}
+              value={careerInterestsStr}
+              onChange={(e) => setCareerInterestsStr(e.target.value)}
+              placeholder="Artificial Intelligence, Machine Learning, Deep Learning"
               className="w-full px-4 py-2.5 rounded-xl bg-gray-900/80 border border-white/10 text-white text-sm focus:border-cyan-400"
             />
           </div>
@@ -212,11 +219,9 @@ export default function AdminProfilePage() {
             </label>
             <input
               type="text"
-              value={profile.technical_interests?.join(", ") || ""}
-              onChange={(e) => setProfile({ 
-                ...profile, 
-                technical_interests: e.target.value.split(",").map(s => s.trim()).filter(Boolean) 
-              })}
+              value={technicalInterestsStr}
+              onChange={(e) => setTechnicalInterestsStr(e.target.value)}
+              placeholder="Neural Networks, Autonomous Agents, Cloud Architecture"
               className="w-full px-4 py-2.5 rounded-xl bg-gray-900/80 border border-white/10 text-white text-sm focus:border-cyan-400"
             />
           </div>
