@@ -106,16 +106,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Secure server-side verification
     try {
+      const clientVaultPassword = typeof window !== 'undefined' ? localStorage.getItem("portfolio_admin_vault_pass") : null;
+
       const res = await fetch("/api/admin/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ 
+          email, 
+          password,
+          clientVaultPassword: clientVaultPassword || undefined
+        }),
       });
 
       const data = await res.json();
       if (res.ok && data.success && data.user) {
         setUser(data.user);
         localStorage.setItem(LOCAL_AUTH_KEY, JSON.stringify(data.user));
+        localStorage.setItem("portfolio_admin_vault_pass", password);
         return { success: true };
       } else {
         return { success: false, error: data.error || "Invalid email or password." };

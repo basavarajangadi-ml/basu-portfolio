@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
+import { verifyAdminCredentials, getAdminEmail } from "@/lib/auth/adminStore";
 
 export async function POST(request: Request) {
   try {
-    const { email, password } = await request.json();
+    const { email, password, clientVaultPassword } = await request.json();
 
     if (!email || !password) {
       return NextResponse.json(
@@ -11,24 +12,16 @@ export async function POST(request: Request) {
       );
     }
 
-    const adminEmail = process.env.ADMIN_EMAIL;
-    const adminPassword = process.env.ADMIN_PASSWORD;
+    const isValid = verifyAdminCredentials(email, password, clientVaultPassword);
 
-    // Both ADMIN_EMAIL and ADMIN_PASSWORD must be configured
-    if (!adminEmail || !adminPassword) {
-      return NextResponse.json(
-        { error: "Admin access is protected. Please configure ADMIN_EMAIL and ADMIN_PASSWORD in your server environment variables." },
-        { status: 503 }
-      );
-    }
-
-    if (
-      email.trim().toLowerCase() === adminEmail.trim().toLowerCase() &&
-      password === adminPassword
-    ) {
+    if (isValid) {
       return NextResponse.json({
         success: true,
-        user: { id: "admin-secure-id", email: adminEmail, role: "admin" }
+        user: { 
+          id: "admin-secure-id", 
+          email: email.trim().toLowerCase(), 
+          role: "admin" 
+        }
       });
     }
 
